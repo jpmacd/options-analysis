@@ -2,28 +2,25 @@ from os import getenv
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import MetaData
-from sqlalchemy.future import select  # For async query generation
+from options.database.models import Base
 
 
-# Configure the database URL (PostgreSQL example)
 DATABASE_URL = getenv("DATABASE_URL", "default")
 
-# Create async engine
 engine = create_async_engine(DATABASE_URL, echo=True, future=True)
 
-# Create sessionmaker for AsyncSession (factory for creating async sessions)
-AsyncSessionLocal = async_sessionmaker(
+session_factory = async_sessionmaker(
     engine,
-    class_=AsyncSession,  # This specifies that we want to use AsyncSession
-    expire_on_commit=False,  # Prevent session objects from expiring after commit
+    class_=AsyncSession,
+    expire_on_commit=False,
 )
 
 metadata = MetaData()
 
 
 async def get_db_session():
-    async with AsyncSessionLocal() as session:
-        yield session
+    async with session_factory() as s:
+        yield s
 
 
 async def init_db():

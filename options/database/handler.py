@@ -1,16 +1,14 @@
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.future import select
-from options.database.db import get_db_session
+from options.database.db import get_db_session, engine
 
 
 async def query_handler(query):
-    engine = create_async_engine(engine_url, echo=True, future=True)
-    s = get_db_session()
 
     try:
-        async with s as s:
+        async for s in get_db_session():
             result = await s.execute(query)
             return result.scalars().all()
 
     finally:
-        await engine.dispose()
+        await s.aclose()

@@ -8,6 +8,3 @@ from options.queue.tasks import add
 async def get_all_stocks():
     stocks = await query_handler(query=select(Stocks))
     return stocks
-
-
-result = add.delay(4, 5)
