@@ -6,6 +6,7 @@
 !mypy.ini
 !docker-compose.yml
 !run_*.sh
+!requirements.txt
 !__main__.py
 !options/
 !options/*.py
