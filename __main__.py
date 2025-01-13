@@ -11,12 +11,12 @@ logger.setLevel("INFO")
 async def main():
     await init_db()
 
-    task_result = update_stock_tickers.apply_async()
-    logger.info(f"Task enqueued with ID: {task_result.id}")
-    await wait_for_task_result(task_result)
-
-    # task_result = update_stock_prices.apply_async()
+    # task_result = update_stock_tickers.apply_async()
+    # logger.info(f"Task enqueued with ID: {task_result.id}")
     # await wait_for_task_result(task_result)
+
+    task_result = update_stock_prices.apply_async()
+    await wait_for_task_result(task_result)
 
 
 async def wait_for_task_result(task_result):

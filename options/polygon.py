@@ -42,14 +42,13 @@ async def save_or_update(session: AsyncSession, model, unique_field: str, data: 
     await session.commit()
 
 
-async def save_stocks_to_db(stocks_data):
+async def save_data(data):
     async for session in get_db_session():
-        for stock in stocks_data:
-            stock_data = {
-                "ticker": stock["ticker"],
-                "price": stock.get("price", None),
-            }
-            await save_or_update(session, Stocks, "ticker", stock_data)
+        for x in data:
+            try:
+                await save_or_update(session, Stocks, "ticker", x)
+            except Exception as e:
+                logger.exception(f"{e} : {x}")
 
 
 class PolygonAPIHandler:
@@ -96,19 +95,17 @@ class PolygonAPIHandler:
             response = await self.send_request(next_url)
             logger.info(f"response: {response}")
 
-            if "error" in response:
-                logger.error(f"{response['error']}")
-                break
-
             results = response.get("results")
             if not results:
                 return response
             if results:
-                all_data.append(results)
+                all_data.extend([results])
+            logger.info(f"all_data {all_data}")
             next_url = response.get("next_url")
+            logger.info(f"next_url {next_url}")
             if not next_url:
                 logger.info("No more pages to fetch.")
-            return all_data
+        return all_data
 
 
 async def download_all_stock_tickers():
@@ -122,22 +119,21 @@ async def download_all_stock_tickers():
             "limit": "1000",
         },
     )
-
+    logger.info(f"stocks_data = {stocks_data}")
     if not stocks_data:
         logger.info("No stocks data retrieved.")
         return None
-
-    await save_stocks_to_db(stocks_data)
-    logger.info(f"Saved {len(stocks_data)} stocks to the database.")
+    results = [
+        {"ticker": stock["ticker"], "name": stock["name"]} for stock in stocks_data
+    ]
+    await save_data(results)
+    logger.info(f"Saved {len(results)} stocks to the database.")
 
     return len(stocks_data)
 
 
 async def download_stock_price(ticker):
     handler = PolygonAPIHandler(API_KEY)
-
-    # Log ticker and its type to debug any issues
-    logger.info(f"Ticker: {ticker} (type: {type(ticker)})")
 
     # Fetch stock price data from Polygon API
     stock_price_data = await handler.get_data(
@@ -153,13 +149,16 @@ async def download_stock_price(ticker):
 
     if isinstance(stock_price_data, list) and stock_price_data:
         stock_data_dict = stock_price_data[0]
-        logger.info(f"{type(stock_data_dict)}")
         price = stock_data_dict.get("p")
         updated = stock_data_dict.get("f")
 
     # Prepare data to save
     stock_data = {"ticker": ticker, "price": price, "updated": updated}
-
+    logger.info(f"Stock Data: {stock_data}")
     # Save stock data to database
-    await save_stocks_to_db([stock_data])
-    logger.info(f"Saved current price for {ticker}: {ask_price}")
+    await save_data(
+        [
+            stock_data,
+        ]
+    )
+    logger.info(f"Saved current price for {ticker}: {price}")

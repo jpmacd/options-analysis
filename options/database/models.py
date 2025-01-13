@@ -12,8 +12,9 @@ class Stocks(Base):
     __tablename__ = "stocks"
 
     id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
     ticker = Column(String, nullable=False)
-    price = Column(Float, nullable=False)
+    price = Column(Float, nullable=True)
 
 
 class Options(Base):
