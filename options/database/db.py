@@ -2,12 +2,12 @@ from os import getenv
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import MetaData
-from options.database.models import Base
+from .models import Base
 
 
 DATABASE_URL = getenv("DATABASE_URL", "default")
 
-engine = create_async_engine(DATABASE_URL, echo=True, future=True)
+engine = create_async_engine(DATABASE_URL, echo=False, future=True)
 
 session_factory = async_sessionmaker(
     engine,
