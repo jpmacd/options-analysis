@@ -2,52 +2,54 @@ import logging
 from os.path import exists
 from os import getenv, mkdir
 from typing import Optional
+from dotenv import find_dotenv, load_dotenv
+
+load_dotenv(find_dotenv())
+
+LOG_CONFIGURED = False
 
 
 class Log:
     def __init__(self, name: Optional[str]) -> None:
-        self.debug = getenv("DEBUG")
-        self.log_dir = getenv("LOG_DIR")
+        self.debug = getenv("DEBUG", "False").lower() == "true"
+        self.log_dir = getenv("LOG_DIR", "logs")
+        if not exists(self.log_dir):
+            mkdir(self.log_dir)
+
         self.handlers: list = []
         self.name = name
         self.logger = logging.getLogger(self.name)
-
-    def make_log_dir(self) -> None:
-        if self.log_dir:
-            if not exists(f"{self.log_dir}"):
-                mkdir(f"{self.log_dir}")
 
     def add_stream_handler(self) -> None:
         self.handlers.append(logging.StreamHandler())
 
     def add_file_handler(self) -> None:
         if self.name and self.log_dir:
-            self.handlers.append(
-                logging.FileHandler(filename=f"{self.log_dir}/{self.name}.log")
-            )
+            # file_path = f"{self.log_dir}/{self.name}.log"
+            file_path = f"{self.log_dir}/{'application'}.log"
+            self.handlers.append(logging.FileHandler(filename=file_path, mode="a"))
 
     def basic_config(self) -> None:
-        logging.basicConfig(
-            level=logging.DEBUG if self.debug else logging.INFO,
-            format="[%(asctime)s][%(levelname)s][%(name)s:%(funcName)s:%(lineno)d] %(message)s",
-            handlers=self.handlers,
-        )
+        global LOG_CONFIGURED
+        if not LOG_CONFIGURED:
+            logging.basicConfig(
+                level=logging.DEBUG if self.debug else logging.INFO,
+                format="[%(asctime)s][%(levelname)s][%(name)s:%(funcName)s:%(lineno)d] %(message)s",
+                handlers=self.handlers,
+            )
+            LOG_CONFIGURED = True
 
     def get_logger(self):
         return self.logger
 
 
 def log_factory(name: Optional[str]) -> logging.Logger:
-    _logger_ = Log(name)
-    _logger_.add_stream_handler()
-    _logger_.make_log_dir()
-    _logger_.add_file_handler()
-    _logger_.basic_config()
-    return _logger_.get_logger()
+    logger = logging.getLogger(name)
 
+    if not logger.hasHandlers():
+        _logger_ = Log(name)
+        _logger_.add_stream_handler()
+        _logger_.add_file_handler()
+        _logger_.basic_config()
 
-logging.basicConfig(
-    format="[%(asctime)s][%(levelname)s][%(name)s:%(funcName)s:%(lineno)d] %(message)s",
-)
-logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
-logging.getLogger("sqlalchemy.pool").setLevel(logging.WARNING)
+    return logger

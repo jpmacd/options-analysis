@@ -1,14 +1,39 @@
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.future import select
-from options.database.db import get_db_session, engine
+from sqlalchemy.sql import Select, Insert, Update, Delete
+from options.database.db import get_db_session
+from options.log import log_factory
+
+logger = log_factory(f"{__name__}")
 
 
-async def query_handler(query):
-
+def execution_handler(statement):
     try:
-        async for s in get_db_session():
-            result = await s.execute(query)
-            return result.scalars().all()
+        session = get_db_session()
+        try:
+            if isinstance(statement, Select):
+                result = session.execute(statement)
+                return result.scalars().all()
 
-    finally:
-        await s.aclose()
+            elif isinstance(statement, Insert):
+                session.execute(statement)
+
+            elif isinstance(statement, Update):
+                session.execute(statement)
+
+            elif isinstance(statement, Delete):
+                session.execute(statement)
+
+            elif hasattr(statement, "__table__"):
+                session.add(statement)
+
+            session.commit()
+            return None
+
+        except Exception as e:
+            session.rollback()
+            logger.exception(f"{e.__class__.__name__}")
+
+        finally:
+            session.close()
+
+    except Exception as e:
+        logger.exception(f"{e.__class__.__name__}")

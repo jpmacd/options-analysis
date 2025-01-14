@@ -1,28 +1,19 @@
 from os import getenv
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy import MetaData
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, Session
 from .models import Base
-
 
 DATABASE_URL = getenv("DATABASE_URL", "default")
 
-engine = create_async_engine(DATABASE_URL, echo=False, future=True)
+engine = create_engine(DATABASE_URL, echo=False)
 
-session_factory = async_sessionmaker(
-    engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-)
-
-metadata = MetaData()
+session_factory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
-async def get_db_session():
-    async with session_factory() as s:
-        yield s
+def get_db_session():
+    return session_factory()
 
 
-async def init_db():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+def init_db():
+    with engine.begin() as conn:
+        Base.metadata.create_all(conn)
