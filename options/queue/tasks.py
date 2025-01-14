@@ -40,7 +40,7 @@ def update_call_options(t: str):
 
 @app.task
 def spawn_update_call_options():
-    tickers = execution_handler(select(Stocks.ticker).limit(2))
+    tickers = execution_handler(select(Stocks.ticker))
     for ticker in tickers:
         update_call_options.apply_async(args=[ticker])
 
@@ -50,18 +50,14 @@ def update_options_quote(t: str):
     data = get_options_quote(ticker=t)
     for entry in data:
         query = (
-            pginsert(Options)
-            .values(entry)
-            .on_conflict_do_update(
-                index_elements=["ticker"], set_={key: entry[key] for key in entry}
-            )
+            update(Options).values(entry).where(Options.ticker == entry.get("ticker"))
         )
         execution_handler(query)
 
 
 @app.task
 def spawn_update_options_quote():
-    tickers = execution_handler(select(Options.ticker).limit(2))
+    tickers = execution_handler(select(Options.ticker))
     for ticker in tickers:
         logger.info(f"Spawning task to update options quote {ticker}")
         update_options_quote.apply_async(args=[ticker])
@@ -72,18 +68,17 @@ def update_stock_quote(t: str):
     data = get_stock_quote(ticker=t)
     for entry in data:
         query = (
-            pginsert(Options)
+            update(Options)
             .values(entry)
-            .on_conflict_do_update(
-                index_elements=["ticker"], set_={key: entry[key] for key in entry}
-            )
+            .where(Options.underlying_ticker == entry.get("underlying_ticker"))
         )
         execution_handler(query)
 
 
 @app.task
 def spawn_update_stock_quote():
-    tickers = execution_handler(select(Options.ticker).limit(2))
+    tickers = execution_handler(select(Stocks.ticker))
+    print(tickers)
     for ticker in tickers:
         logger.info(f"Spawning task to update stock quote {ticker}")
         update_stock_quote.apply_async(args=[ticker])

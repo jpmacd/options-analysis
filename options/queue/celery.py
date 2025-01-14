@@ -1,6 +1,9 @@
 from os import getenv
 from celery import Celery
 from celery.schedules import crontab
+import eventlet
+
+eventlet.monkey_patch(all=False, socket=True)
 
 app = Celery(
     "options", broker="redis://localhost:6379/0", backend="redis://localhost:6379/0"
@@ -8,17 +11,25 @@ app = Celery(
 app.autodiscover_tasks(["options.queue"])
 app.conf.result_backend = getenv("CELERY_RESULTS_URL")
 app.conf.broker_connection_retry_on_startup = True
-app.conf.worker_pool = "eventlet"
-app.conf.worker_concurrency = 1
+# app.conf.worker_pool = "prefork"
+app.conf.worker_concurrency = 4
 
 
 app.conf.beat_schedule = {
-    "task-every-10-seconds": {
-        "task": "tasks.my_periodic_task",
-        "schedule": 10.0,  # Every 10 seconds
+    "update_stock_tickers": {
+        "task": "options.queue.tasks.update_stock_tickers",
+        "schedule": 3600,  # Every 10 seconds
     },
-    "task-every-day": {
-        "task": "tasks.my_daily_task",
-        "schedule": crontab(minute=0, hour=0),  # Every day at midnight
+    "spawn_update_call_options": {
+        "task": "options.queue.tasks.spawn_update_call_options",
+        "schedule": 60,  # Every 30 seconds
+    },
+    "spawn_update_stock_quote": {
+        "task": "options.queue.tasks.spawn_update_stock_quote",
+        "schedule": 60.0,  # Every 1 minute
+    },
+    "spawn_update_options_quote": {
+        "task": "options.queue.tasks.spawn_update_options_quote",
+        "schedule": 60.0,  # Every 5 minutes
     },
 }
