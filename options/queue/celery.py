@@ -18,11 +18,11 @@ app.conf.worker_concurrency = 4
 app.conf.beat_schedule = {
     "update_stock_tickers": {
         "task": "options.queue.tasks.update_stock_tickers",
-        "schedule": 3600,  # Every 10 seconds
+        "schedule": 3600,
     },
     "spawn_update_call_options": {
         "task": "options.queue.tasks.spawn_update_call_options",
-        "schedule": 60,  # Every 30 seconds
+        "schedule": 3600,  # Every 30 seconds
     },
     "spawn_update_stock_quote": {
         "task": "options.queue.tasks.spawn_update_stock_quote",

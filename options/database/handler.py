@@ -11,7 +11,7 @@ def execution_handler(statement):
         try:
             if isinstance(statement, Select):
                 result = session.execute(statement)
-                return result.scalars().all()
+                return result.fetchall()
 
             elif isinstance(statement, Insert):
                 session.execute(statement)
