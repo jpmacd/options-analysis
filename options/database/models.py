@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Date
 from sqlalchemy.orm import relationship, DeclarativeBase
 from sqlalchemy.future import select
 import datetime
@@ -21,12 +21,16 @@ class Options(Base):
     __tablename__ = "options"
 
     id = Column(Integer, primary_key=True, index=True)
-    symbol = Column(String, nullable=False)
+    ticker = Column(String, nullable=False)
+    underlying_ticker = Column(String, nullable=False)
+    ask_price = Column(Float, nullable=False)
+    ask_size = Column(Integer, nullable=False)
     strike_price = Column(Float, nullable=False)
     expiration_date = Column(String, nullable=False)
-    type = Column(String, nullable=False)  # e.g., 'call' or 'put'
-    stock_id = Column(Integer, ForeignKey("stocks.id"), nullable=False)
+    contract_type = Column(String, nullable=False)
+    shares_per_contract = Column(Integer, nullable=False)
+    expiration_date = Column(Date, nullable=False)
     stock = relationship("Stocks", backref="options")
-    delta = Column(Float, nullable=True)  # Delta value
-    price = Column(Float, nullable=True)  # Current price of the option
-    updated = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
+    delta = Column(Float, nullable=True)
+    price = Column(Float, nullable=True)
+    timestamp = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)

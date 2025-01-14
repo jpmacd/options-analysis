@@ -36,4 +36,5 @@ async def wait_for_task_result(task_result):
 
 
 if __name__ == "__main__":
-    asyncio.run(main())  # Run the main async function
+    init_db()
+    main()

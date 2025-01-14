@@ -10,28 +10,8 @@ logger = log_factory(f"{__name__}")
 
 
 @app.task
-def update_stock_tickers():
-    try:
-        result = asyncio.run(download_all_stock_tickers())
-        if result is None:
-            logger.error("No data was retrieved from Polygon API.")
-        else:
-            logger.info(f"Successfully retrieved and saved {result} stock tickers.")
-        return result
-    except Exception as e:
-        logger.error(f"Task failed with error: {str(e)}")
-        return None
+def update_stock_tickers(): ...
 
 
 @app.task
-def update_stock_prices():
-    try:
-
-        async def fetch_prices():
-            all_tickers = await query_handler(query=select(Stocks.ticker))
-            for ticker in all_tickers:
-                await download_stock_price(ticker=ticker)
-
-        asyncio.run(fetch_prices())
-    except Exception as e:
-        logger.error(f"Task failed with error: {str(e)}")
+def update_stock_prices(): ...
