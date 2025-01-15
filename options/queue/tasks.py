@@ -48,16 +48,48 @@ def spawn_update_call_options():
 @app.task
 def update_options_quote(t: str):
     data = get_options_quote(ticker=t)
-    data = sorted(data, key=lambda x: x.get("ticker"))
+    if not data:
+        logger.warning(f"No quote data available for ticker: {t}")
+        return
+
+    # Sort data by ticker (if needed)
+    data = sorted(data, key=lambda x: x.get("option_id"))
+
     for entry in data:
-        option_id = execution_handler(
-            select(Options.id).where(Options.ticker == entry.get("ticker"))
+        # Fetch the option ID
+        option_id_result = execution_handler(
+            select(Options.id).where(Options.ticker == entry.get("option_id"))
         )
-        if option_id:
-            entry["option_id"] = option_id[0][0]
-            entry["ask_price"] = entry.pop("ask_price")
-            query = pginsert(OptionsQuote).values(entry).on_conflict_do_nothing()
+        if not option_id_result:
+            logger.warning(
+                f"No matching Options entry found for ticker: {entry.get('option_id')}"
+            )
+            continue
+
+        # Assign `option_id` for the quote
+        entry["option_id"] = option_id_result[0][0]
+
+        # Insert or update the quote
+        try:
+            query = (
+                pginsert(OptionsQuote)
+                .values(entry)
+                .on_conflict_do_update(
+                    index_elements=["option_id", "timestamp"],
+                    set_={
+                        "ask_price": entry["ask_price"],
+                        "ask_size": entry["ask_size"],
+                    },
+                )
+            )
             execution_handler(query)
+            logger.info(
+                f"Quote successfully updated for ticker: {entry.get('option_id')}"
+            )
+        except Exception as e:
+            logger.exception(
+                f"Failed to update quote for ticker {entry.get('option_id')}: {e}"
+            )
 
 
 @app.task

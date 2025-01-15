@@ -33,14 +33,20 @@ class Options(Base):
     )
 
 
+from sqlalchemy import UniqueConstraint
+
+
 class OptionsQuote(Base):
     __tablename__ = "options_quotes"
 
     id = Column(Integer, primary_key=True, index=True)
     option_id = Column(Integer, ForeignKey("options.id"), nullable=False)
-    timestamp = Column(DateTime)
-    ask_price = Column(Float)  # Added to match the code
-    ask_size = Column(Integer)  # Added to match the code
+    timestamp = Column(DateTime, nullable=False)
+    ask_price = Column(Float, nullable=False)
+    ask_size = Column(Integer, nullable=False)
+    __table_args__ = (
+        UniqueConstraint("option_id", "timestamp", name="uq_option_id_timestamp"),
+    )
     option = relationship("Options", back_populates="quotes")
 
 
