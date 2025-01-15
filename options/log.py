@@ -33,7 +33,7 @@ class Log:
         global LOG_CONFIGURED
         if not LOG_CONFIGURED:
             logging.basicConfig(
-                level=logging.DEBUG if self.debug else logging.INFO,
+                level=logging.DEBUG if self.debug else logging.WARNING,
                 format="[%(asctime)s][%(levelname)s][%(name)s:%(funcName)s:%(lineno)d] %(message)s",
                 handlers=self.handlers,
             )

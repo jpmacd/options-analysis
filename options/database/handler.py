@@ -6,34 +6,32 @@ logger = log_factory(f"{__name__}")
 
 
 def execution_handler(statement):
+    session = None
     try:
         session = get_db_session()
-        try:
-            if isinstance(statement, Select):
-                result = session.execute(statement)
-                return result.fetchall()
+        if isinstance(statement, Select):
+            result = session.execute(statement)
+            return result.fetchall()
 
-            elif isinstance(statement, Insert):
-                session.execute(statement)
+        elif isinstance(statement, Insert):
+            session.execute(statement)
 
-            elif isinstance(statement, Update):
-                session.execute(statement)
+        elif isinstance(statement, Update):
+            session.execute(statement)
 
-            elif isinstance(statement, Delete):
-                session.execute(statement)
+        elif isinstance(statement, Delete):
+            session.execute(statement)
 
-            elif hasattr(statement, "__table__"):
-                session.add(statement)
+        elif hasattr(statement, "__table__"):
+            session.add(statement)
 
-            session.commit()
-            return None
-
-        except Exception as e:
-            session.rollback()
-            logger.exception(f"{e.__class__.__name__}")
-
-        finally:
-            session.close()
+        session.commit()
+        return None
 
     except Exception as e:
-        logger.exception(f"{e.__class__.__name__}")
+        if session:
+            session.rollback()
+        logger.exception(f"Error executing statement: {e}")
+    finally:
+        if session:
+            session.close()

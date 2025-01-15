@@ -11,8 +11,8 @@ app = Celery(
 app.autodiscover_tasks(["options.queue"])
 app.conf.result_backend = getenv("CELERY_RESULTS_URL")
 app.conf.broker_connection_retry_on_startup = True
-# app.conf.worker_pool = "prefork"
-app.conf.worker_concurrency = 4
+app.conf.worker_pool = "prefork"
+app.conf.worker_concurrency = 2
 
 
 app.conf.beat_schedule = {
@@ -22,7 +22,7 @@ app.conf.beat_schedule = {
     },
     "spawn_update_call_options": {
         "task": "options.queue.tasks.spawn_update_call_options",
-        "schedule": 3600,  # Every 30 seconds
+        "schedule": 3600,
     },
     "spawn_update_stock_quote": {
         "task": "options.queue.tasks.spawn_update_stock_quote",
@@ -33,3 +33,9 @@ app.conf.beat_schedule = {
         "schedule": 60.0,  # Every 5 minutes
     },
 }
+
+
+@app.on_after_configure.connect
+def run_on_startup(sender, **kwargs):
+    sender.send_task("options.queue.tasks.update_stock_tickers")
+    sender.send_task("options.queue.tasks.spawn_update_call_options")

@@ -6,17 +6,18 @@ from options.utils import convert_timestamp
 
 logger = log_factory(name=f"{__name__}")
 
-
 client = RESTClient(api_key=getenv(f"API_KEY"))
 
 
 def get_all_stocks():
     try:
-        r = client.list_tickers(market="stocks", active=True, limit="1000")
-        unique_results = {(x.ticker, x.name) for x in r}
+        unique_results = set()
+        for item in client.list_tickers(market="stocks", active=True, limit="1000"):
+            if hasattr(item, "ticker") and hasattr(item, "name"):
+                unique_results.add((item.ticker, item.name))
         return [{"ticker": ticker, "name": name} for ticker, name in unique_results]
     except Exception as e:
-        logger.exception(f"{e.__class__.__name__}")
+        logger.exception(f"Error in get_all_stocks: {e}")
         return []
 
 
@@ -40,7 +41,7 @@ def get_call_options(ticker: Optional[str] = None) -> list:
             }
             for x in r
         )
-        logger.info(f"Retrieved {len(results)} options for ${ticker}")
+        logger.debug(f"Retrieved {len(results)} options for ${ticker}")
     except Exception as e:
         logger.exception(f"{e.__class__.__name__}")
     finally:
@@ -54,14 +55,14 @@ def get_stock_quote(ticker: str):
         r = client.get_last_trade(
             ticker=ticker,
         )
-        logger.info(f"Requesting stock quote for {ticker}")
+        logger.debug(f"Requesting stock quote for {ticker}")
         results.append(
             {
-                "underlying_last_trade_price": r.price,
-                "underlying_ticker": ticker,
+                "price": r.price,
+                "timestamp": convert_timestamp(r.sip_timestamp),
+                "stock_id": ticker,
             }
         )
-        logger.info(f"Quote: {results}")
     except Exception as e:
         logger.exception(f"{e.__class__.__name__}")
     finally:
@@ -71,20 +72,17 @@ def get_stock_quote(ticker: str):
 def get_options_quote(ticker: str):
     results: list = []
     try:
-        r = client.get_last_quote(
-            ticker=ticker,
-        )
-        logger.info(f"Requesting option quote for {ticker}")
+        r = client.get_last_quote(ticker=ticker)
+        logger.debug(f"Requesting option quote for {ticker}")
         results.append(
             {
-                "ticker": r.ticker,
                 "ask_price": r.ask_price,
                 "ask_size": r.ask_size,
                 "timestamp": convert_timestamp(r.sip_timestamp),
+                "option_id": ticker,  # Matches schema's `option_id`
             }
         )
-        logger.info(f"Quote: {results}")
     except Exception as e:
-        logger.exception(f"{e.__class__.__name__}")
+        logger.exception(f"Error fetching options quote: {e}")
     finally:
         return results

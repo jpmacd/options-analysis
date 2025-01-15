@@ -5,9 +5,13 @@ from .models import Base
 
 DATABASE_URL = getenv("DATABASE_URL", "default")
 
-engine = create_engine(DATABASE_URL, echo=False)
+engine = create_engine(DATABASE_URL, echo=False, pool_size=100, max_overflow=25)
 
-session_factory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+session_factory = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine,
+)
 
 
 def get_db_session():
