@@ -10,6 +10,8 @@ from options.log import log_factory
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pginsert
 from options.database.models import Stocks, Options, StocksQuote, OptionsQuote
+from celery import chain
+import time
 
 logger = log_factory(f"{__name__}")
 
@@ -82,6 +84,29 @@ def spawn_update_stock_quote():
     tasks = 0
     tickers = execution_handler(select(Stocks.ticker))
     for (ticker,) in tickers:
-        tasks += 1
         update_stock_quote.apply_async(args=[ticker])
     logger.info(f"queued {tasks} tasks")
+
+
+@app.task
+def update_stock_tickers_and_call_options():
+    # Run `update_stock_tickers` and ensure it completes first
+    update_result = app.send_task("options.queue.tasks.update_stock_tickers")
+
+    # Wait for the first task to complete
+    while not update_result.ready():
+        time.sleep(1)
+
+    # If `update_stock_tickers` is successful, proceed to `spawn_update_call_options`
+    if update_result.successful():
+        app.send_task("options.queue.tasks.spawn_update_call_options")
+    else:
+        raise RuntimeError(
+            "Failed to update stock tickers; skipping update call options."
+        )
+
+
+@app.on_after_configure.connect
+def run_on_startup(sender, **kwargs):
+    # Trigger the orchestrated tasks at startup
+    app.send_task("options.queue.tasks.update_stock_tickers_and_call_options")
