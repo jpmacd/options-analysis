@@ -8,6 +8,10 @@ logger = log_factory(name=f"{__name__}")
 
 client = RESTClient(api_key=getenv(f"API_KEY"))
 
+from dotenv import find_dotenv, load_dotenv
+
+load_dotenv(find_dotenv())
+
 
 def get_all_stocks():
     try:
@@ -72,17 +76,17 @@ def get_stock_quote(ticker: str):
 def get_options_quote(ticker: str):
     results: list = []
     try:
+        logger.info(f"Fetching quote for ticker: {ticker}")
         r = client.get_last_quote(ticker=ticker)
-        logger.debug(f"Requesting option quote for {ticker}")
         results.append(
             {
                 "ask_price": r.ask_price,
                 "ask_size": r.ask_size,
                 "timestamp": convert_timestamp(r.sip_timestamp),
-                "option_id": ticker,  # Matches schema's `option_id`
+                "option_id": ticker,
             }
         )
     except Exception as e:
-        logger.exception(f"Error fetching options quote: {e}")
+        logger.exception(f"Error fetching options quote for ticker {ticker}: {e}")
     finally:
         return results

@@ -15,10 +15,10 @@ app.conf.worker_pool = "prefork"
 app.conf.worker_concurrency = 2
 
 app.conf.beat_schedule = {
-    "update_stock_tickers_and_call_options": {
-        "task": "options.queue.tasks.update_stock_tickers_and_call_options",
-        "schedule": 3600,
-    },
+    # "update_stock_tickers_and_call_options": {
+    #     "task": "options.queue.tasks.update_stock_tickers_and_call_options",
+    #     "schedule": 3600,
+    # },
     "spawn_update_stock_quote": {
         "task": "options.queue.tasks.spawn_update_stock_quote",
         "schedule": 60.0,

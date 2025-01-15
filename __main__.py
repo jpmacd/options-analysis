@@ -1,11 +1,10 @@
+import time
 import streamlit as st
 import pandas as pd
 from sqlalchemy.sql import select
 from options.database.models import Options, OptionsQuote, Stocks, StocksQuote
 from options.log import log_factory
 from options.database.handler import execution_handler
-from celery import current_app
-import time
 from options.utils import get_task_queue_status
 
 logger = log_factory(f"{__name__}")
@@ -53,10 +52,8 @@ def calculate_fields(data):
             "stock_timestamp",
         ],
     )
-
     if df.empty:
         return df
-
     df["option_price"] = df["ask_price"].fillna(0) * 100
     df["option_position_size"] = df["ask_size"].fillna(0) * df["option_price"]
     df["execution_cost"] = (
@@ -73,63 +70,66 @@ def calculate_fields(data):
 
 
 def main():
-    st.title("Options Dashboard - Live Updates")
 
-    # Sidebar: Celery Stats Section
+    refresh_interval = st.sidebar.slider("Refresh Interval (seconds)", 5, 60, 10)
+    auto_refresh = st.sidebar.checkbox("Enable Auto-Refresh", value=False)
+
     with st.sidebar:
         st.header("Task Queue Stats")
         task_status = get_task_queue_status()
         st.metric("Queued", task_status["queued"])
         st.metric("Active", task_status["active"])
         st.metric("Completed", f"{task_status['percent_complete']} %")
-
-    # Sidebar: Filters Section
-    with st.sidebar:
         st.header("Filters")
-
         ticker_filter = st.text_input("Search by Ticker")
-        expiration_date_filter = st.date_input(
-            "Expiration Date", value=None, min_value=None, max_value=None
-        )
-        return_filter = st.slider(
-            "% Return on Capital",
-            min_value=-100.0,
-            max_value=100.0,
-            value=(-100.0, 100.0),
-        )
-        strike_price_filter = st.slider(
-            "Strike Price",
-            min_value=0.0,
-            max_value=1000.0,
-            value=(0.0, 1000.0),
-        )
+        expiration_date_filter = st.date_input("Expiration Date", value=None)
+        return_filter = st.slider("% Return on Capital", -100.0, 100.0, (-100.0, 100.0))
+        strike_price_filter = st.slider("Strike Price", 0.0, 1000.0, (0.0, 1000.0))
         filter_complete_data = st.checkbox("Only options with all required data")
         filter_positive_profit = st.checkbox("Only options with profit > 0")
         underlying_price_filter = st.slider(
-            "Underlying Price",
-            min_value=0.0,
-            max_value=50000.0,
-            value=(0.0, 50000.0),
+            "Underlying Price", 0.0, 50000.0, (0.0, 50000.0)
         )
 
-    # Fetch data
-    with st.spinner("Fetching data..."):
-        data = fetch_options_data()
-        df = calculate_fields(data)
+    if "data" not in st.session_state or "df" not in st.session_state:
+        st.session_state["data"] = fetch_options_data()
+        st.session_state["df"] = calculate_fields(st.session_state["data"])
 
-        # with st.sidebar:
-        #     st.header("Total Options")
-        #     contracts = fetch_options_data()
-        #     if not contracts:
-        #         contracts = []
+    if auto_refresh:
+        placeholder = st.empty()
+        while auto_refresh:
+            st.session_state["data"] = fetch_options_data()
+            st.session_state["df"] = calculate_fields(st.session_state["data"])
+            placeholder.dataframe(
+                st.session_state["df"][
+                    [
+                        "ticker",
+                        "underlying_ticker",
+                        "ask_price",
+                        "ask_size",
+                        "option_price",
+                        "option_position_size",
+                        "execution_cost",
+                        "market_cost",
+                        "profit",
+                        "return_on_capital",
+                        "expiration_date",
+                        "strike_price",
+                        "stock_price",
+                        "stock_timestamp",
+                        "option_timestamp",
+                    ]
+                ]
+            )
+            st.metric("Total Results", len(st.session_state["df"]))
+            time.sleep(refresh_interval)
 
-        # st.metric(f"{len(contracts)} contracts")
+    df = st.session_state["df"]
 
     if df.empty:
         st.warning("No data available.")
         return
 
-    # Apply filters
     if ticker_filter:
         df = df[df["ticker"].str.contains(ticker_filter, case=False, na=False)]
     if expiration_date_filter:
@@ -163,7 +163,8 @@ def main():
         & (df["stock_price"] <= underlying_price_filter[1])
     ]
 
-    # Display data
+    st.metric("Total Results", len(df))
+
     st.dataframe(
         df[
             [
@@ -186,7 +187,6 @@ def main():
         ]
     )
 
-    # CSV download
     csv = df.to_csv(index=False)
     st.download_button(
         label="Download Filtered Data as CSV",
@@ -194,10 +194,6 @@ def main():
         file_name="filtered_options.csv",
         mime="text/csv",
     )
-
-    # Auto-refresh
-    time.sleep(10)
-    st.experimental_rerun()
 
 
 if __name__ == "__main__":

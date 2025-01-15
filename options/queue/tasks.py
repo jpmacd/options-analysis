@@ -62,7 +62,7 @@ def update_options_quote(t: str):
 
 @app.task
 def spawn_update_options_quote():
-    tickers = execution_handler(select(Options.ticker))
+    tickers = execution_handler(select(Options.ticker).limit(1))
     for (ticker,) in tickers:
         update_options_quote.apply_async(args=[ticker])
 
