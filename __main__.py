@@ -3,11 +3,12 @@ import streamlit as st
 import pandas as pd
 from sqlalchemy.sql import select
 from options.database.models import Options, OptionsQuote, Stocks, StocksQuote
-from options.log import log_factory
+
 from options.database.handler import execution_handler
 from options.utils import get_task_queue_status
+import logging
 
-logger = log_factory(f"{__name__}")
+logging.getLogger("watchdog").setLevel(logging.CRITICAL)
 
 
 def fetch_options_data():
@@ -54,23 +55,24 @@ def calculate_fields(data):
     )
     if df.empty:
         return df
-    df["option_price"] = df["ask_price"].fillna(0) * 100
+    df["option_price"] = df["ask_price"].fillna(0).infer_objects(copy=False) * 100
     df["option_position_size"] = df["ask_size"].fillna(0) * df["option_price"]
     df["execution_cost"] = (
         df["strike_price"].fillna(0) * df["shares_per_contract"].fillna(0)
-    ) * 100
+    ).infer_objects(copy=False) * 100
     df["market_cost"] = df["stock_price"].fillna(0) * df["shares_per_contract"].fillna(
         0
-    )
+    ).infer_objects(copy=False)
     df["profit"] = df["market_cost"] - df["execution_cost"]
     df["return_on_capital"] = (
         df["profit"] / df["execution_cost"].replace(0, pd.NA)
-    ).fillna(0) * 100
+    ).fillna(0).infer_objects(copy=False) * 100
+
     return df
 
 
 def main():
-
+    # Sidebar options
     refresh_interval = st.sidebar.slider("Refresh Interval (seconds)", 5, 60, 10)
     auto_refresh = st.sidebar.checkbox("Enable Auto-Refresh", value=False)
 
@@ -91,16 +93,26 @@ def main():
             "Underlying Price", 0.0, 50000.0, (0.0, 50000.0)
         )
 
-    if "data" not in st.session_state or "df" not in st.session_state:
+    # Initialize session state for data and dataframe
+    if "data" not in st.session_state:
+        st.session_state["data"] = None
+    if "df" not in st.session_state:
+        st.session_state["df"] = None
+
+    # Fetch data if not already done
+    if st.session_state["data"] is None:
         st.session_state["data"] = fetch_options_data()
+    if st.session_state["df"] is None and st.session_state["data"]:
         st.session_state["df"] = calculate_fields(st.session_state["data"])
 
-    if auto_refresh:
-        placeholder = st.empty()
-        while auto_refresh:
-            st.session_state["data"] = fetch_options_data()
-            st.session_state["df"] = calculate_fields(st.session_state["data"])
-            placeholder.dataframe(
+    # Placeholders for dynamic content
+    placeholder_table = st.empty()
+    placeholder_metric = st.empty()
+
+    # Render the table and metrics
+    if st.session_state["df"] is not None and not st.session_state["df"].empty:
+        with placeholder_table.container():
+            st.dataframe(
                 st.session_state["df"][
                     [
                         "ticker",
@@ -121,80 +133,59 @@ def main():
                     ]
                 ]
             )
-            st.metric("Total Results", len(st.session_state["df"]))
+        placeholder_metric.metric("Total Results", len(st.session_state["df"]))
+    else:
+        placeholder_table.warning("Loading data, please wait...")
+        placeholder_metric.metric("Total Results", 0)
+
+    # Handle auto-refresh
+    if auto_refresh:
+        while auto_refresh:
+            st.session_state["data"] = fetch_options_data()
+            st.session_state["df"] = calculate_fields(st.session_state["data"])
+
+            # Update placeholders
+            if st.session_state["df"] is not None and not st.session_state["df"].empty:
+                with placeholder_table.container():
+                    st.dataframe(
+                        st.session_state["df"][
+                            [
+                                "ticker",
+                                "underlying_ticker",
+                                "ask_price",
+                                "ask_size",
+                                "option_price",
+                                "option_position_size",
+                                "execution_cost",
+                                "market_cost",
+                                "profit",
+                                "return_on_capital",
+                                "expiration_date",
+                                "strike_price",
+                                "stock_price",
+                                "stock_timestamp",
+                                "option_timestamp",
+                            ]
+                        ]
+                    )
+                placeholder_metric.metric("Total Results", len(st.session_state["df"]))
+            else:
+                placeholder_table.warning("Loading data, please wait...")
+                placeholder_metric.metric("Total Results", 0)
+
             time.sleep(refresh_interval)
 
-    df = st.session_state["df"]
-
-    if df.empty:
-        st.warning("No data available.")
-        return
-
-    if ticker_filter:
-        df = df[df["ticker"].str.contains(ticker_filter, case=False, na=False)]
-    if expiration_date_filter:
-        df = df[df["expiration_date"] == expiration_date_filter]
-    df = df[
-        (df["return_on_capital"] >= return_filter[0])
-        & (df["return_on_capital"] <= return_filter[1])
-    ]
-    df = df[
-        (df["strike_price"] >= strike_price_filter[0])
-        & (df["strike_price"] <= strike_price_filter[1])
-    ]
-    if filter_complete_data:
-        required_columns = [
-            "ticker",
-            "underlying_ticker",
-            "strike_price",
-            "contract_type",
-            "shares_per_contract",
-            "expiration_date",
-            "delta",
-            "ask_price",
-            "ask_size",
-            "stock_price",
-        ]
-        df = df.dropna(subset=required_columns)
-    if filter_positive_profit:
-        df = df[df["profit"] > 0]
-    df = df[
-        (df["stock_price"] >= underlying_price_filter[0])
-        & (df["stock_price"] <= underlying_price_filter[1])
-    ]
-
-    st.metric("Total Results", len(df))
-
-    st.dataframe(
-        df[
-            [
-                "ticker",
-                "underlying_ticker",
-                "ask_price",
-                "ask_size",
-                "option_price",
-                "option_position_size",
-                "execution_cost",
-                "market_cost",
-                "profit",
-                "return_on_capital",
-                "expiration_date",
-                "strike_price",
-                "stock_price",
-                "stock_timestamp",
-                "option_timestamp",
-            ]
-        ]
-    )
-
-    csv = df.to_csv(index=False)
-    st.download_button(
-        label="Download Filtered Data as CSV",
-        data=csv,
-        file_name="filtered_options.csv",
-        mime="text/csv",
-    )
+    # Download button for filtered data
+    if st.session_state["df"] is not None:
+        csv = st.session_state["df"].to_csv(index=False)
+        st.download_button(
+            label="Download Filtered Data as CSV",
+            data=csv,
+            file_name="filtered_options.csv",
+            mime="text/csv",
+        )
 
 
 if __name__ == "__main__":
+    logging.getLogger("watchdog").disabled = True
     main()

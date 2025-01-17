@@ -1,5 +1,6 @@
 from options.queue.celery import app
 from options.database.handler import execution_handler
+from options.database.db import get_db_session
 from options.datasource import (
     get_all_stocks,
     get_call_options,
@@ -14,6 +15,8 @@ from celery import chain
 import time
 
 logger = log_factory(f"{__name__}")
+
+LIMIT = 999999
 
 
 @app.task
@@ -39,106 +42,115 @@ def update_call_options(t: str):
 
 
 @app.task
-def spawn_update_call_options():
-    tickers = execution_handler(select(Stocks.ticker))
-    for (ticker,) in tickers:
-        update_call_options.apply_async(args=[ticker])
-
-
-@app.task
 def update_options_quote(t: str):
     data = get_options_quote(ticker=t)
     if not data:
         logger.warning(f"No quote data available for ticker: {t}")
         return
 
-    # Sort data by ticker (if needed)
-    data = sorted(data, key=lambda x: x.get("option_id"))
+    option_id_result = execution_handler(select(Options.id).where(Options.ticker == t))
+    if not option_id_result:
+        logger.warning(f"No matching Options entry found for ticker: {t}")
+        return
+
+    option_id = option_id_result[0][0]
+
+    quotes = [
+        {
+            "option_id": option_id,
+            "timestamp": entry["timestamp"],
+            "ask_price": entry["ask_price"],
+            "ask_size": entry["ask_size"],
+        }
+        for entry in data
+    ]
+
+    for quote in quotes:
+        query = (
+            pginsert(OptionsQuote)
+            .values(**quote)
+            .on_conflict_do_update(
+                index_elements=["option_id", "timestamp"],
+                set_={
+                    "ask_price": quote["ask_price"],
+                    "ask_size": quote["ask_size"],
+                },
+            )
+        )
+        try:
+            execution_handler(query)
+        except Exception as e:
+            logger.exception(f"Failed to update quote for option_id {option_id}: {e}")
+
+
+@app.task
+def update_stocks_quote(t: str):
+    data = get_stock_quote(ticker=t)
+    stock_id_result = execution_handler(select(Stocks.id).where(Stocks.ticker == t))
+    if not stock_id_result:
+        logger.warning(f"No matching Stock entry found for ticker: {t}")
+        return
+
+    stock_id = stock_id_result[0][0]
 
     for entry in data:
-        # Fetch the option ID
-        option_id_result = execution_handler(
-            select(Options.id).where(Options.ticker == entry.get("option_id"))
-        )
-        if not option_id_result:
-            logger.warning(
-                f"No matching Options entry found for ticker: {entry.get('option_id')}"
-            )
-            continue
-
-        # Assign `option_id` for the quote
-        entry["option_id"] = option_id_result[0][0]
-
-        # Insert or update the quote
         try:
             query = (
-                pginsert(OptionsQuote)
-                .values(entry)
+                pginsert(StocksQuote)
+                .values(
+                    {
+                        "stock_id": stock_id,
+                        "timestamp": entry["timestamp"],
+                        "price": entry["price"],
+                    }
+                )
                 .on_conflict_do_update(
-                    index_elements=["option_id", "timestamp"],
-                    set_={
-                        "ask_price": entry["ask_price"],
-                        "ask_size": entry["ask_size"],
-                    },
+                    index_elements=["stock_id", "timestamp"],
+                    set_={"price": entry["price"]},
                 )
             )
             execution_handler(query)
-            logger.info(
-                f"Quote successfully updated for ticker: {entry.get('option_id')}"
-            )
+            logger.info(f"Quote updated for stock_id: {stock_id}")
         except Exception as e:
-            logger.exception(
-                f"Failed to update quote for ticker {entry.get('option_id')}: {e}"
-            )
+            logger.exception(f"Failed to update quote for stock_id {stock_id}: {e}")
 
 
 @app.task
 def spawn_update_options_quote():
-    tickers = execution_handler(select(Options.ticker).limit(1))
+    tickers = execution_handler(select(Options.ticker).limit(LIMIT))
     for (ticker,) in tickers:
         update_options_quote.apply_async(args=[ticker])
 
 
 @app.task
-def update_stock_quote(t: str):
-    data = get_stock_quote(ticker=t)
-    stock_id = execution_handler(select(Stocks.id).where(Stocks.ticker == t))
-    if stock_id:
-        for entry in data:
-            entry["stock_id"] = stock_id[0][0]
-            entry["price"] = entry.pop("price")
-            query = pginsert(StocksQuote).values(entry).on_conflict_do_nothing()
-            execution_handler(query)
+def spawn_update_stocks_quote():
+    tickers = execution_handler(select(Stocks.ticker).limit(LIMIT))
+    for (ticker,) in tickers:
+        update_stocks_quote.apply_async(args=[ticker])
 
 
 @app.task
-def spawn_update_stock_quote():
-    tasks = 0
-    tickers = execution_handler(select(Stocks.ticker))
+def spawn_update_call_options():
+    tickers = execution_handler(select(Stocks.ticker).limit(LIMIT))
     for (ticker,) in tickers:
-        update_stock_quote.apply_async(args=[ticker])
-    logger.info(f"queued {tasks} tasks")
+        update_call_options.apply_async(args=[ticker])
 
 
 @app.task
 def update_stock_tickers_and_call_options():
-    # Run `update_stock_tickers` and ensure it completes first
-    update_result = app.send_task("options.queue.tasks.update_stock_tickers")
-
-    # Wait for the first task to complete
-    while not update_result.ready():
-        time.sleep(1)
-
-    # If `update_stock_tickers` is successful, proceed to `spawn_update_call_options`
-    if update_result.successful():
-        app.send_task("options.queue.tasks.spawn_update_call_options")
-    else:
-        raise RuntimeError(
-            "Failed to update stock tickers; skipping update call options."
-        )
+    try:
+        result = app.send_task("options.queue.tasks.update_stock_tickers")
+        task_result = result.get(timeout=300)
+        if result.state == "SUCCESS":
+            app.send_task("options.queue.tasks.spawn_update_call_options")
+        else:
+            raise RuntimeError(
+                f"Task update_stock_tickers failed with state: {result.state}. Skipping call options update."
+            )
+    except Exception as e:
+        raise RuntimeError(f"Error during task execution: {e}")
 
 
-@app.on_after_configure.connect
+@app.on_after_finalize.connect
 def run_on_startup(sender, **kwargs):
-    # Trigger the orchestrated tasks at startup
     app.send_task("options.queue.tasks.update_stock_tickers_and_call_options")

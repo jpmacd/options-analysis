@@ -55,6 +55,10 @@ class StocksQuote(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     stock_id = Column(Integer, ForeignKey("stocks.id"), nullable=False)
-    timestamp = Column(DateTime)
-    price = Column(Float)
+    timestamp = Column(DateTime, nullable=False)
+    price = Column(Float, nullable=False)
+    __table_args__ = (
+        UniqueConstraint("stock_id", "timestamp", name="uq_stock_id_timestamp"),
+    )
+
     stock = relationship("Stocks", back_populates="quotes")

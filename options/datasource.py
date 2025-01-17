@@ -6,7 +6,7 @@ from options.utils import convert_timestamp
 
 logger = log_factory(name=f"{__name__}")
 
-client = RESTClient(api_key=getenv(f"API_KEY"))
+client = RESTClient(api_key=getenv(f"API_KEY"), num_pools=500)
 
 from dotenv import find_dotenv, load_dotenv
 
@@ -31,7 +31,7 @@ def get_call_options(ticker: Optional[str] = None) -> list:
         r = client.list_options_contracts(
             underlying_ticker=ticker,
             contract_type="call",
-            limit="5",
+            limit="1000",
             expired=False,
         )
         results.extend(
@@ -67,6 +67,7 @@ def get_stock_quote(ticker: str):
                 "stock_id": ticker,
             }
         )
+        logger.debug(f"Quote for {ticker}: {results}")
     except Exception as e:
         logger.exception(f"{e.__class__.__name__}")
     finally:
@@ -76,7 +77,7 @@ def get_stock_quote(ticker: str):
 def get_options_quote(ticker: str):
     results: list = []
     try:
-        logger.info(f"Fetching quote for ticker: {ticker}")
+        logger.debug(f"Fetching quote for ticker: {ticker}")
         r = client.get_last_quote(ticker=ticker)
         results.append(
             {
@@ -86,6 +87,8 @@ def get_options_quote(ticker: str):
                 "option_id": ticker,
             }
         )
+        logger.debug(f"Quote for {ticker}: {results}")
+
     except Exception as e:
         logger.exception(f"Error fetching options quote for ticker {ticker}: {e}")
     finally:

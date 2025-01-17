@@ -1,1 +1,1 @@
-celery -A options.queue.celery beat --loglevel=info
+celery -A options.queue.celery beat --loglevel=debug
