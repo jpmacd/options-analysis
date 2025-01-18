@@ -44,9 +44,7 @@ class OptionsQuote(Base):
     timestamp = Column(DateTime, nullable=False)
     ask_price = Column(Float, nullable=False)
     ask_size = Column(Integer, nullable=False)
-    __table_args__ = (
-        UniqueConstraint("option_id", "timestamp", name="uq_option_id_timestamp"),
-    )
+    __table_args__ = (UniqueConstraint("option_id", name="uq_option_id"),)
     option = relationship("Options", back_populates="quotes")
 
 
@@ -57,8 +55,6 @@ class StocksQuote(Base):
     stock_id = Column(Integer, ForeignKey("stocks.id"), nullable=False)
     timestamp = Column(DateTime, nullable=False)
     price = Column(Float, nullable=False)
-    __table_args__ = (
-        UniqueConstraint("stock_id", "timestamp", name="uq_stock_id_timestamp"),
-    )
+    __table_args__ = (UniqueConstraint("stock_id", name="uq_stock_id"),)
 
     stock = relationship("Stocks", back_populates="quotes")

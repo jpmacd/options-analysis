@@ -13,6 +13,8 @@ from sqlalchemy.dialects.postgresql import insert as pginsert
 from options.database.models import Stocks, Options, StocksQuote, OptionsQuote
 from celery import chain
 import time
+from datetime import datetime
+
 
 logger = log_factory(f"{__name__}")
 
@@ -41,6 +43,9 @@ def update_call_options(t: str):
         execution_handler(query)
 
 
+from datetime import datetime
+
+
 @app.task
 def update_options_quote(t: str):
     data = get_options_quote(ticker=t)
@@ -55,30 +60,32 @@ def update_options_quote(t: str):
 
     option_id = option_id_result[0][0]
 
-    quotes = [
-        {
+    for entry in data:
+        quote = {
             "option_id": option_id,
-            "timestamp": entry["timestamp"],
+            "timestamp": entry["timestamp"],  # Use the timestamp as-is
             "ask_price": entry["ask_price"],
             "ask_size": entry["ask_size"],
         }
-        for entry in data
-    ]
 
-    for quote in quotes:
         query = (
             pginsert(OptionsQuote)
             .values(**quote)
             .on_conflict_do_update(
-                index_elements=["option_id", "timestamp"],
+                index_elements=["option_id"],  # Unique constraint columns
                 set_={
                     "ask_price": quote["ask_price"],
                     "ask_size": quote["ask_size"],
+                    "timestamp": entry["timestamp"],
                 },
             )
         )
+
         try:
             execution_handler(query)
+            logger.info(
+                f"Processed quote for option_id: {option_id}, timestamp: {entry['timestamp']}"
+            )
         except Exception as e:
             logger.exception(f"Failed to update quote for option_id {option_id}: {e}")
 
@@ -86,6 +93,10 @@ def update_options_quote(t: str):
 @app.task
 def update_stocks_quote(t: str):
     data = get_stock_quote(ticker=t)
+    if not data:
+        logger.warning(f"No quote data available for ticker: {t}")
+        return
+
     stock_id_result = execution_handler(select(Stocks.id).where(Stocks.ticker == t))
     if not stock_id_result:
         logger.warning(f"No matching Stock entry found for ticker: {t}")
@@ -105,14 +116,21 @@ def update_stocks_quote(t: str):
                     }
                 )
                 .on_conflict_do_update(
-                    index_elements=["stock_id", "timestamp"],
-                    set_={"price": entry["price"]},
+                    index_elements=[
+                        "stock_id",
+                    ],  # Unique constraint columns
+                    set_={
+                        "price": entry["price"],
+                        "timestamp": entry["timestamp"],
+                    },  # Only update the price
                 )
             )
             execution_handler(query)
-            logger.info(f"Quote updated for stock_id: {stock_id}")
+            logger.info(
+                f"Processed quote for stock_id: {stock_id}, timestamp: {entry['timestamp']}"
+            )
         except Exception as e:
-            logger.exception(f"Failed to update quote for stock_id {stock_id}: {e}")
+            logger.exception(f"Failed to process quote for stock_id {stock_id}: {e}")
 
 
 @app.task
@@ -151,6 +169,6 @@ def update_stock_tickers_and_call_options():
         raise RuntimeError(f"Error during task execution: {e}")
 
 
-@app.on_after_finalize.connect
-def run_on_startup(sender, **kwargs):
-    app.send_task("options.queue.tasks.update_stock_tickers_and_call_options")
+# @app.on_after_finalize.connect
+# def run_on_startup(sender, **kwargs):
+#     app.send_task("options.queue.tasks.update_stock_tickers_and_call_options")

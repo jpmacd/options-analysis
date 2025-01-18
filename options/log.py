@@ -14,35 +14,43 @@ class Log:
         if not exists(self.log_dir):
             mkdir(self.log_dir)
 
-        self.handlers: list = []
+        self.handlers = []
         self.name = name
         self.logger = logging.getLogger(self.name)
+        self.logger.setLevel(logging.DEBUG if self.debug else logging.INFO)
 
     def add_stream_handler(self) -> None:
-        self.handlers.append(logging.StreamHandler())
+        stream_handler = logging.StreamHandler()
+        stream_handler.setFormatter(
+            logging.Formatter(
+                "[%(asctime)s][%(levelname)s][%(name)s:%(funcName)s:%(lineno)d] %(message)s"
+            )
+        )
+        self.handlers.append(stream_handler)
 
     def add_file_handler(self) -> None:
         if self.name and self.log_dir:
             file_path = f"{self.log_dir}/{self.name}.log"
-            # file_path = f"{self.log_dir}/{'application'}.log"
-            self.handlers.append(logging.FileHandler(filename=file_path, mode="a"))
+            file_handler = logging.FileHandler(filename=file_path, mode="a")
+            file_handler.setFormatter(
+                logging.Formatter(
+                    "[%(asctime)s][%(levelname)s][%(name)s:%(funcName)s:%(lineno)d] %(message)s"
+                )
+            )
+            self.handlers.append(file_handler)
 
-    def basic_config(self) -> None:
-        logging.basicConfig(
-            level=logging.DEBUG if self.debug else logging.INFO,
-            format="[%(asctime)s][%(levelname)s][%(name)s:%(funcName)s:%(lineno)d] %(message)s",
-            handlers=self.handlers,
-        )
+    def apply_handlers(self) -> None:
+        for handler in self.handlers:
+            if handler not in self.logger.handlers:
+                self.logger.addHandler(handler)
 
-    def get_logger(self):
+    def get_logger(self) -> logging.Logger:
+        self.apply_handlers()
         return self.logger
 
 
-def log_factory(name: Optional[str]) -> logging.Logger:
-    logger = logging.getLogger(name)
-    _logger_ = Log(name)
-    _logger_.add_stream_handler()
-    _logger_.add_file_handler()
-    _logger_.basic_config()
-
-    return logger
+def log_factory(name: Optional[str] = None) -> logging.Logger:
+    logger = Log(name)
+    logger.add_stream_handler()
+    logger.add_file_handler()
+    return logger.get_logger()

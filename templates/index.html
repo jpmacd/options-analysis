@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Options Data</title>
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+    <style>
+        /* General Styles */
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            justify-content: center;
+            background-color: #121212;
+            color: #f1c40f;
+            font-family: "Roboto Mono", monospace;
+        }
+        .container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        h1 {
+            color: #ffa500;
+            font-size: 28px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        /* Table Styling */
+        table.dataTable {
+            width: 100%;
+            table-layout: fixed; /* Prevents overflow */
+            border: 1px solid #555;
+            background-color: #2b2b2b;
+            color: #f1c40f;
+        }
+        table.dataTable thead th {
+            background-color: #333;
+            color: #ffa500;
+            font-weight: bold;
+            text-transform: uppercase;
+            border-bottom: 2px solid #666;
+            white-space: nowrap; /* Prevents text wrapping */
+            overflow: hidden; /* Hides overflow text */
+            text-overflow: ellipsis; /* Adds "..." for overflowing text */
+        }
+        table.dataTable tbody td {
+            text-align: center;
+            border-bottom: 1px solid #444;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        table.dataTable tbody tr:hover {
+            background-color: #444;
+        }
+        /* Conditional Profit Styles */
+        .profit-positive {
+            background-color: #2ecc71;
+            color: #000;
+        }
+        .profit-negative {
+            background-color: #e74c3c;
+            color: #000;
+        }
+        .profit-missing {
+            background-color: #7f8c8d;
+            color: #000;
+        }
+        /* Button Styling */
+        .btn-filter-profit {
+            display: inline-block;
+            margin: 10px auto;
+            padding: 12px 20px;
+            font-size: 16px;
+            color: #000;
+            background-color: #f1c40f;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            text-align: center;
+            transition: background-color 0.3s ease;
+        }
+        .btn-filter-profit:hover {
+            background-color: #d4ac0d;
+        }
+        /* Loading Spinner */
+        #loading-spinner {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+        #loading-spinner i {
+            font-size: 2rem;
+            color: #f1c40f;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            from {
+                transform: rotate(0deg);
+            }
+            to {
+                transform: rotate(360deg);
+            }
+        }
+        /* Responsive Adjustments */
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 24px;
+            }
+            .btn-filter-profit {
+                font-size: 14px;
+                padding: 10px 15px;
+            }
+            table.dataTable thead th, table.dataTable tbody td {
+                font-size: 12px;
+                padding: 5px;
+            }
+        }
+    </style>
+    <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Options Data</h1>
+        <button class="btn-filter-profit" id="filter-profit">Show Only Profitable</button>
+        <div id="loading-spinner">
+            <i class="fas fa-spinner"></i> Loading...
+        </div>
+        <table id="options-table" class="display" style="width:100%">
+            <thead>
+                <tr>
+                    <th>Ticker</th>
+                    <th>Underlying Ticker</th>
+                    <th>Strike Price</th>
+                    <th>Contract Type</th>
+                    <th>Shares per Contract</th>
+                    <th>Expiration Date</th>
+                    <th>Delta</th>
+                    <th>Ask Price</th>
+                    <th>Ask Size</th>
+                    <th>Option Timestamp</th>
+                    <th>Stock Price</th>
+                    <th>Stock Timestamp</th>
+                    <th>Option Price</th>
+                    <th>opportunity</th>
+                    <th>Execution Cost</th>
+                    <th>Market Cost</th>
+                    <th>Profit</th>
+                    <th>Return on Capital</th>
+                </tr>
+            </thead>
+        </table>
+    </div>
+    <script>
+        $(document).ready(function () {
+            const spinner = $("#loading-spinner");
+
+            const table = $("#options-table").DataTable({
+                serverSide: true,
+                processing: true,
+                ajax: {
+                    url: "/data",
+                    type: "POST",
+                    beforeSend: function () {
+                        spinner.show();
+                    },
+                    complete: function () {
+                        spinner.hide();
+                    },
+                },
+                columns: [
+                    { data: "ticker" },
+                    { data: "underlying_ticker" },
+                    { data: "strike_price", render: renderCurrency },
+                    { data: "contract_type" },
+                    { data: "shares_per_contract" },
+                    { data: "expiration_date" },
+                    { data: "delta", render: renderDecimal },
+                    { data: "ask_price", render: renderCurrency },
+                    { data: "ask_size" },
+                    { data: "option_timestamp" },
+                    { data: "stock_price", render: renderCurrency },
+                    { data: "stock_timestamp" },
+                    { data: "option_price", render: renderCurrency },
+                    { data: "option_position_size", render: renderCurrency },
+                    { data: "execution_cost", render: renderCurrency },
+                    { data: "market_cost", render: renderCurrency },
+                    {
+                        data: "profit",
+                        render: function (data, type, row) {
+                            if (type === "display") {
+                                if (row.execution_cost === 0 || row.market_cost === 0) {
+                                    return `<span class="profit-missing">$${data || "N/A"}</span>`;
+                                } else if (data > 0) {
+                                    return `<span class="profit-positive">$${data.toFixed(2)}</span>`;
+                                } else {
+                                    return `<span class="profit-negative">$${data.toFixed(2)}</span>`;
+                                }
+                            }
+                            return data; // Raw data for sorting
+                        },
+                        type: "num",
+                    },
+                    {
+                        data: "return_on_capital",
+                        render: function (data, type, row) {
+                            if (type === "display") {
+                                return `${parseFloat(data || 0).toFixed(2)}%`;
+                            }
+                            return data; // Raw data for sorting
+                        },
+                        type: "num",
+                    },
+                ],
+                order: [[16, "desc"]], // Default sort on Profit column
+                pageLength: 10,
+                lengthMenu: [10, 25, 50, 100],
+                searchDelay: 500,
+            });
+
+            function renderCurrency(data) {
+                return data === null || data === "" ? "N/A" : `$${parseFloat(data).toFixed(2)}`;
+            }
+
+            function renderDecimal(data) {
+                return data === null || data === "" ? "N/A" : parseFloat(data).toFixed(2);
+            }
+
+            // Filter for profitable rows
+            $("#filter-profit").on("click", function () {
+                table.ajax.url("/data?filter=profitable").load(); // Reload table with filter
+            });
+        });
+
+
+    </script>
+</body>
+</html>
